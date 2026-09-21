@@ -1,0 +1,21 @@
+{
+  "_comment": "Справочник кодов проектов (раздел 7 инструкции). Обновляется вручную при появлении новых проектов Gestión Operativa. asanaProjectGid нужно заполнить реальным GID проекта из Asana (Project settings → Copy link, число в конце ссылки).",
+  "asOf": "2026-09",
+  "projects": [
+    { "code": "APR",  "asanaProjectName": "2509_APR1 - Gestión Operativa", "shortName": "Altos de Puente Romano",        "asanaProjectGid": "", "operational": true },
+    { "code": "NVA",  "asanaProjectName": "2508_NVA - Gestión Operativa",  "shortName": "Nueva Andalucía",                "asanaProjectGid": "", "operational": true },
+    { "code": "TTN",  "asanaProjectName": "2504_TTN - Gestión Operativa",  "shortName": "Titanium / Casa Lita",           "asanaProjectGid": "", "operational": true },
+    { "code": "ABS",  "asanaProjectName": "2407_ABS - Gestión Operativa",  "shortName": "Centro Comercial Antibesaya",    "asanaProjectGid": "", "operational": true },
+    { "code": "CAM",  "asanaProjectName": "2411_CAM - Gestión Operativa",  "shortName": "Camoján 92",                     "asanaProjectGid": "", "operational": true },
+    { "code": "OFP",  "asanaProjectName": "2401_OFP - Gestión Operativa",  "shortName": "Edificio Diz",                   "asanaProjectGid": "", "operational": true },
+    { "code": "TYR",  "asanaProjectName": "2301_TYR - Gestión Operativa",  "shortName": "Tyrian Estepona",                "asanaProjectGid": "", "operational": true },
+    { "code": "VHN",  "asanaProjectName": "2408_VHN - Gestión Operativa",  "shortName": "Villa Hanna",                    "asanaProjectGid": "", "operational": true },
+    { "code": "BSQ2", "asanaProjectName": "2303_BSQ2 - Gestión Operativa", "shortName": "BSQ2",                           "asanaProjectGid": "", "operational": true },
+    { "code": "LDV",  "asanaProjectName": "2203_LDV - Gestión Operativa",  "shortName": "LDV",                            "asanaProjectGid": "", "operational": true },
+    { "code": "NHB",  "asanaProjectName": "2302_NHB - Gestión Operativa",  "shortName": "NHB",                            "asanaProjectGid": "", "operational": true },
+    { "code": "BSB",  "asanaProjectName": "2410_BSB - Gestión Operativa",  "shortName": "BSB",                            "asanaProjectGid": "", "operational": true },
+    { "code": "PCR",  "asanaProjectName": "2402_PCR - Gestión Operativa",  "shortName": "PCR",                            "asanaProjectGid": "", "operational": true },
+    { "code": "LC7",  "asanaProjectName": "2601_LC7 - Gestión Operativa",  "shortName": "LC7",                            "asanaProjectGid": "", "operational": true },
+    { "code": "PEX",  "asanaProjectName": "0000_PEX",                      "shortName": "Prestige Expo (общефирменные задачи)", "asanaProjectGid": "", "operational": false }
+  ]
+}
