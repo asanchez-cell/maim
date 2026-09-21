@@ -1,6 +1,6 @@
 import { config } from "../config";
 import { logger } from "../logger";
-import type { AsanaStory, AsanaTask, AsanaWebhook } from "./types";
+import type { AsanaEventsResult, AsanaStory, AsanaTask, AsanaWebhook } from "./types";
 
 const BASE_URL = "https://app.asana.com/api/1.0";
 
@@ -129,6 +129,34 @@ export const asana = {
     } catch {
       return null;
     }
+  },
+
+  /**
+   * Events API — используется для поллинга вместо постоянного вебхук-сервера
+   * (GitHub Actions по расписанию). Без sync-токена или с устаревшим токеном
+   * Asana отвечает 412 и отдаёт свежий токен без списка событий — это и есть
+   * "первичная синхронизация", после которой начинают приходить настоящие события.
+   */
+  async getEvents(resourceGid: string, syncToken?: string): Promise<AsanaEventsResult> {
+    const query = syncToken ? `&sync=${encodeURIComponent(syncToken)}` : "";
+    const res = await fetch(`${BASE_URL}/events?resource=${resourceGid}${query}`, {
+      headers: { Authorization: `Bearer ${config.asana.accessToken}` },
+    });
+
+    const body = (await res.json().catch(() => ({}))) as { data?: AsanaEventsResult["events"]; sync?: string };
+
+    if (res.status === 412) {
+      if (!body.sync) {
+        throw new Error(`Asana Events API вернул 412 без sync-токена для ресурса ${resourceGid}`);
+      }
+      return { events: [], sync: body.sync, needsResync: true };
+    }
+
+    if (!res.ok) {
+      throw new Error(`Asana API GET /events -> ${res.status}: ${JSON.stringify(body)}`);
+    }
+
+    return { events: body.data ?? [], sync: body.sync ?? "", needsResync: false };
   },
 };
 

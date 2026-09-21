@@ -1,0 +1,44 @@
+name: Asanchez — опрос Asana
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: asanchez-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Опросить проекты Asana и обработать изменённые задачи
+        run: npm run poll
+        env:
+          ASANA_ACCESS_TOKEN: ${{ secrets.ASANA_ACCESS_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-5' }}
+
+      - name: Сохранить sync-токены
+        # Коммитим прогресс, даже если предыдущий шаг упал для части проектов —
+        # частичный прогресс по остальным всё равно не должен теряться.
+        if: always()
+        run: |
+          git config user.name "asanchez-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add state/sync-tokens.json
+          git diff --cached --quiet || git commit -m "chore: update Asana sync state [skip ci]"
+          git push

@@ -37,3 +37,17 @@ export interface AsanaWebhook {
   target: string;
   active: boolean;
 }
+
+export interface AsanaEvent {
+  action: string;
+  resource: { gid: string; resource_type: string; resource_subtype?: string };
+  parent?: { gid: string; resource_type: string } | null;
+  created_at: string;
+}
+
+export interface AsanaEventsResult {
+  events: AsanaEvent[];
+  sync: string;
+  /** true, если это была первая синхронизация (или старый sync истёк) — событий за прошлое нет. */
+  needsResync: boolean;
+}
