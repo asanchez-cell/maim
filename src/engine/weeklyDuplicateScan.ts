@@ -1,7 +1,7 @@
 import { asana } from "../asana/client";
 import { config } from "../config";
 import { logger } from "../logger";
-import { operationalProjects } from "../projectCodes";
+import { trackedProjects } from "../projectCodes";
 import { judgeDuplicatePair } from "../claude/client";
 import { nameOverlapRatio } from "../rules/duplicates";
 import type { AsanaTask } from "../asana/types";
@@ -94,7 +94,7 @@ export async function runWeeklyDuplicateScan(): Promise<void> {
   logger.info("Запуск еженедельной проверки дублей");
   const allPairs: ReportedPair[] = [];
 
-  for (const project of operationalProjects()) {
+  for (const project of trackedProjects()) {
     try {
       const pairs = await scanProjectForPairs(project);
       allPairs.push(...pairs);

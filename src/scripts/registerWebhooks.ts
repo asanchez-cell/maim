@@ -10,7 +10,7 @@
 import { asana } from "../asana/client";
 import { config } from "../config";
 import { logger } from "../logger";
-import { allProjects } from "../projectCodes";
+import { trackedProjects } from "../projectCodes";
 
 async function main(): Promise<void> {
   if (!config.server.publicBaseUrl) {
@@ -21,7 +21,7 @@ async function main(): Promise<void> {
   const workspaceGid = await asana.getWorkspaceGid();
   const existing = await asana.listWebhooks(workspaceGid);
 
-  const projects = allProjects().filter((p) => p.asanaProjectGid);
+  const projects = trackedProjects();
   if (projects.length === 0) {
     logger.warn(
       "В config/projectCodes.json ни у одного проекта не заполнен asanaProjectGid — нечего регистрировать",
