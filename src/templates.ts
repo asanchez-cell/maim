@@ -1,50 +1,36 @@
 /**
- * Шаблоны комментариев и Notes. Комментарии агента — компактные и только на
- * испанском (единый язык коммуникации с командой). Notes (описание задачи)
- * остаются двуязычными ES+RU — см. src/rules/notes.ts.
+ * Фрагменты одного сводного комментария агента (см. src/engine/processTask.ts)
+ * — только на испанском, компактные, собираются в одно сообщение с
+ * @-упоминанием автора задачи. Notes (описание задачи) — двуязычные ES+RU.
  */
 
-export const EMPTY_NOTES_TEMPLATE =
-  "[Pendiente de completar — añade el contexto de la tarea aquí]\n\n---\n\n" +
-  "[Заполнить описание — добавь контекст задачи]";
+// Только испанский плейсхолдер: перевод на русский — задача агента, не
+// человека. Как только появится реальный текст на испанском, агент сам
+// молча допишет русский (см. src/rules/notes.ts) — никого об этом не просят.
+export const EMPTY_NOTES_TEMPLATE = "[Pendiente de completar — añade el contexto de la tarea aquí]";
 
-export function nameErrorComment(creatorName: string, currentName: string, reason: string): string {
+export function nameAskFragment(currentName: string, reason: string): string {
   return (
-    `👋 ${creatorName}, no me queda claro qué hay que hacer en "${currentName}" (${reason}). ` +
-    `¿Puedes aclararlo o renombrarla? Formato: [Verbo infinitivo] + complemento.`
+    `no tengo claro qué hacer con "${currentName}" (${reason}) — ¿puedes aclararlo o renombrarla? ` +
+    `Formato: [Verbo infinitivo] + complemento.`
   );
 }
 
-export function nameFixedComment(oldName: string, newName: string): string {
-  return `✏️ Renombrada para seguir el estándar: "${oldName}" → "${newName}". Corrígelo si no es correcto.`;
+export function nameFixedFragment(oldName: string, newName: string): string {
+  return `he renombrado la tarea para seguir el estándar: "${oldName}" → "${newName}" (corrígelo si no es correcto).`;
 }
 
-export function notesTemplateAddedComment(): string {
-  return `📝 Añadida plantilla de descripción (ES/RU) — complétala, por favor.`;
+export function notesNeededFragment(): string {
+  return `añade una breve descripción del contexto de la tarea.`;
 }
 
-export function possibleDuplicateComment(params: {
-  similarTaskName: string;
-  similarTaskLink: string;
-  assignee: string;
-  dueDate: string;
-  status: string;
-}): string {
-  const { similarTaskName, similarTaskLink, assignee, dueDate, status } = params;
-  return (
-    `⚠︎ Posible duplicado: "${similarTaskName}" → ${similarTaskLink} ` +
-    `(Responsable: ${assignee} | Vencimiento: ${dueDate} | Estado: ${status}). ` +
-    `¿Es otra tarea o se puede cerrar esta y seguir en la vinculada?`
-  );
-}
-
-export function missingFieldsComment(
-  creatorName: string,
-  missingAssignee: boolean,
-  missingDueDate: boolean,
-): string {
+export function missingFieldsFragment(missingAssignee: boolean, missingDueDate: boolean): string {
   const missing = [missingAssignee && "el responsable", missingDueDate && "la fecha límite"]
     .filter(Boolean)
     .join(" y ");
-  return `👤 ${creatorName}, falta ${missing}. ¿Puedes indicarlo?`;
+  return `falta ${missing}.`;
+}
+
+export function duplicateFragment(params: { similarTaskName: string; similarTaskLink: string }): string {
+  return `posible duplicado de "${params.similarTaskName}" → ${params.similarTaskLink}.`;
 }

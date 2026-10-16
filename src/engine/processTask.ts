@@ -6,32 +6,26 @@ import { findConfirmedDuplicates } from "../rules/duplicates";
 import { checkTaskName } from "../rules/nameFormat";
 import { reconcileNotes } from "../rules/notes";
 import {
-  missingFieldsComment,
-  nameErrorComment,
-  nameFixedComment,
-  notesTemplateAddedComment,
-  possibleDuplicateComment,
+  duplicateFragment,
+  missingFieldsFragment,
+  nameAskFragment,
+  nameFixedFragment,
+  notesNeededFragment,
 } from "../templates";
-
-const MARKERS = {
-  nameError: "👋",
-  notesTemplate: "📝",
-};
 
 const IGNORED_SUBTYPES = new Set(["milestone", "approval", "section"]);
 
 /**
- * Дерево решений агента для одной новой задачи Gestión Operativa. Все
- * проверки независимы, выполняются в одном проходе — сбой одной не
- * блокирует остальные.
+ * Обрабатывает одну задачу Gestión Operativa: анализирует название, Notes,
+ * дубли, исполнителя/срок — и публикует **один** сводный комментарий (если
+ * вообще есть что сказать), с @-упоминанием автора задачи, чтобы он получил
+ * уведомление. Автоматические действия (перевод Notes, исправление
+ * названия, когда суть понятна) выполняются молча — комментарий не про них,
+ * а про то, что реально нужно от человека (плюс короткая пометка о
+ * переименовании, чтобы не удивлялся).
  *
- * Название: если формат не соблюдён, но суть задачи понятна из текста —
- * агент сам переименовывает (с прозрачным комментарием); если понять суть
- * нельзя — не угадывает, а спрашивает автора.
- * Описание: сам дополняет недостающий язык перевода, никогда не
- * переписывает то, что уже написано.
  * Во всём остальном агент не закрывает, не удаляет и не переназначает
- * задачи — только комментирует.
+ * задачи.
  */
 export async function processTask(taskGid: string): Promise<void> {
   const task = await asana.getTask(taskGid);
@@ -55,19 +49,44 @@ export async function processTask(taskGid: string): Promise<void> {
   const existingCommentTexts = stories
     .filter((s) => s.type === "comment" || s.resource_subtype === "comment_added")
     .map((s) => s.text ?? "");
-  const alreadyPosted = (marker: string) => existingCommentTexts.some((t) => t.startsWith(marker));
 
-  await Promise.all([
-    checkName(task, alreadyPosted),
-    checkNotes(task, alreadyPosted),
-    checkDuplicates(task, trackedProjectGid, existingCommentTexts),
-    checkRequiredFields(task, existingCommentTexts),
+  const [nameResult, notesResult, duplicates] = await Promise.all([
+    checkTaskName(task.name),
+    reconcileNotes(task.notes),
+    findDuplicatesFor(task, trackedProjectGid),
   ]);
+
+  const fragments: string[] = [];
+
+  fragments.push(...(await applyName(task, nameResult, existingCommentTexts)));
+  fragments.push(...(await applyNotes(task, notesResult)));
+  fragments.push(...newDuplicateFragments(duplicates, existingCommentTexts));
+  fragments.push(...missingFieldFragments(task, existingCommentTexts));
+
+  if (fragments.length === 0) return;
+
+  const combined = fragments.join(" ");
+  const creator = await asana.getTaskCreator(task.gid);
+
+  logger.info("Публикуется сводный комментарий", { taskGid: task.gid, fragments: fragments.length });
+  if (creator) {
+    await asana.addMentionComment(task.gid, creator.gid, combined);
+  } else {
+    await asana.addComment(task.gid, combined);
+  }
 }
 
-async function checkName(task: AsanaTask, alreadyPosted: (m: string) => boolean): Promise<void> {
-  const result = await checkTaskName(task.name);
-  if (result.valid) return;
+async function findDuplicatesFor(task: AsanaTask, projectGid: string) {
+  const otherTasks = (await asana.getProjectTasks(projectGid)).filter((t) => t.gid !== task.gid);
+  return findConfirmedDuplicates(task, otherTasks);
+}
+
+async function applyName(
+  task: AsanaTask,
+  result: Awaited<ReturnType<typeof checkTaskName>>,
+  existingCommentTexts: string[],
+): Promise<string[]> {
+  if (result.valid) return [];
 
   if (result.action === "fix" && result.correctedName) {
     const oldName = task.name;
@@ -77,69 +96,49 @@ async function checkName(task: AsanaTask, alreadyPosted: (m: string) => boolean)
       oldName,
       newName: result.correctedName,
     });
-    await asana.addComment(task.gid, nameFixedComment(oldName, result.correctedName));
-    return;
+    return [nameFixedFragment(oldName, result.correctedName)];
   }
 
   // action === "ask" — агент не уверен, что имелось в виду, и не угадывает
-  if (alreadyPosted(MARKERS.nameError)) return;
-  const creatorName = (await asana.getTaskCreatorName(task.gid)) ?? "equipo";
-  logger.info("Название неоднозначно — запрошено уточнение", { taskGid: task.gid, reason: result.reason });
-  await asana.addComment(task.gid, nameErrorComment(creatorName, task.name, result.reason));
+  const text = nameAskFragment(task.name, result.reason);
+  if (existingCommentTexts.some((t) => t.includes(text))) return [];
+  return [text];
 }
 
-async function checkNotes(task: AsanaTask, alreadyPosted: (m: string) => boolean): Promise<void> {
-  const result = await reconcileNotes(task.notes);
-  if (result.action === "none" || !result.updatedNotes) return;
+async function applyNotes(task: AsanaTask, result: Awaited<ReturnType<typeof reconcileNotes>>): Promise<string[]> {
+  if (result.action === "none" || !result.updatedNotes) return [];
 
   await asana.updateNotes(task.gid, result.updatedNotes);
   logger.info("Notes обновлены", { taskGid: task.gid, action: result.action });
 
-  if (result.action === "added_template" && !alreadyPosted(MARKERS.notesTemplate)) {
-    await asana.addComment(task.gid, notesTemplateAddedComment());
-  }
+  // "added_translation" — тихий перевод, без комментария. Только пустая
+  // заготовка с нуля требует внимания человека (нужен сам контекст).
+  return result.action === "added_template" ? [notesNeededFragment()] : [];
 }
 
-async function checkDuplicates(
-  task: AsanaTask,
-  projectGid: string,
+function newDuplicateFragments(
+  duplicates: Awaited<ReturnType<typeof findConfirmedDuplicates>>,
   existingCommentTexts: string[],
-): Promise<void> {
-  const otherTasks = (await asana.getProjectTasks(projectGid)).filter((t) => t.gid !== task.gid);
-  const confirmed = await findConfirmedDuplicates(task, otherTasks);
-
-  for (const dup of confirmed) {
+): string[] {
+  const fragments: string[] = [];
+  for (const dup of duplicates) {
     const alreadyMentioned = existingCommentTexts.some((t) => t.includes(dup.task.permalink_url));
     if (alreadyMentioned) continue;
-
-    logger.info("Возможный дубль найден", { taskGid: task.gid, similar: dup.task.gid, reason: dup.reason });
-    await asana.addComment(
-      task.gid,
-      possibleDuplicateComment({
-        similarTaskName: dup.task.name,
-        similarTaskLink: dup.task.permalink_url,
-        assignee: dup.task.assignee?.name ?? "—",
-        dueDate: dup.task.due_on ?? "—",
-        status: dup.task.completed ? "Completada / Завершена" : "En curso / В работе",
-      }),
-    );
+    fragments.push(duplicateFragment({ similarTaskName: dup.task.name, similarTaskLink: dup.task.permalink_url }));
   }
+  return fragments;
 }
 
-async function checkRequiredFields(task: AsanaTask, existingCommentTexts: string[]): Promise<void> {
+function missingFieldFragments(task: AsanaTask, existingCommentTexts: string[]): string[] {
   const missingAssignee = !task.assignee;
   const missingDueDate = !task.due_on;
-  if (!missingAssignee && !missingDueDate) return;
+  if (!missingAssignee && !missingDueDate) return [];
 
-  const creatorName = (await asana.getTaskCreatorName(task.gid)) ?? "equipo";
-  const text = missingFieldsComment(creatorName, missingAssignee, missingDueDate);
-
-  // Сравниваем точный текст, а не просто "маркер уже был": если человек
-  // закрыл только часть (например, назначил исполнителя, но не поставил
-  // срок), набор недостающих полей меняется и это уже другой текст —
-  // агент должен напомнить про оставшееся, а не замолчать навсегда.
-  if (existingCommentTexts.includes(text)) return;
-
-  logger.info("Не хватает обязательных полей", { taskGid: task.gid, missingAssignee, missingDueDate });
-  await asana.addComment(task.gid, text);
+  const text = missingFieldsFragment(missingAssignee, missingDueDate);
+  // Сравниваем точный текст, не просто факт "уже было что-то": если человек
+  // закрыл только часть (например, назначил исполнителя), набор
+  // недостающих полей меняется — это другой текст, и агент должен напомнить
+  // про оставшееся, а не замолчать навсегда.
+  if (existingCommentTexts.some((t) => t.includes(text))) return [];
+  return [text];
 }

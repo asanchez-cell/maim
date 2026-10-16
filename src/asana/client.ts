@@ -19,6 +19,10 @@ const TASK_OPT_FIELDS = [
   "permalink_url",
 ].join(",");
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
@@ -67,6 +71,19 @@ export const asana = {
       body: JSON.stringify({ data: { text } }),
     });
     logger.info("Комментарий добавлен", { taskGid });
+  },
+
+  /**
+   * Комментарий с @-упоминанием автора задачи (он получает уведомление от
+   * Asana). "text" идёт сразу после упоминания одним плавным сообщением.
+   */
+  async addMentionComment(taskGid: string, mentionGid: string, text: string): Promise<void> {
+    const html = `<body><a data-asana-gid="${mentionGid}"/>: ${escapeHtml(text)}</body>`;
+    await request(`/tasks/${taskGid}/stories`, {
+      method: "POST",
+      body: JSON.stringify({ data: { html_text: html } }),
+    });
+    logger.info("Комментарий с упоминанием добавлен", { taskGid, mentionGid });
   },
 
   async getStories(taskGid: string): Promise<AsanaStory[]> {
@@ -127,13 +144,14 @@ export const asana = {
   /**
    * created_by — не гарантированное поле на всех тарифах Asana, поэтому
    * запрашивается отдельно и не валит основной getTask при отсутствии.
+   * gid нужен для @-упоминания (чтобы автор получил уведомление).
    */
-  async getTaskCreatorName(taskGid: string): Promise<string | null> {
+  async getTaskCreator(taskGid: string): Promise<{ gid: string; name: string } | null> {
     try {
-      const t = await request<{ created_by: { name: string } | null }>(
-        `/tasks/${taskGid}?opt_fields=created_by.name`,
+      const t = await request<{ created_by: { gid: string; name: string } | null }>(
+        `/tasks/${taskGid}?opt_fields=created_by.gid,created_by.name`,
       );
-      return t.created_by?.name ?? null;
+      return t.created_by ?? null;
     } catch {
       return null;
     }
