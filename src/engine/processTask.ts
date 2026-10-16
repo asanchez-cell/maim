@@ -6,9 +6,9 @@ import { findConfirmedDuplicates } from "../rules/duplicates";
 import { checkTaskName } from "../rules/nameFormat";
 import { reconcileNotes } from "../rules/notes";
 import {
+  missingFieldsComment,
   nameErrorComment,
   nameFixedComment,
-  noAssigneeComment,
   notesTemplateAddedComment,
   possibleDuplicateComment,
 } from "../templates";
@@ -17,7 +17,7 @@ const MARKERS = {
   nameError: "👋",
   notesTemplate: "📝",
   duplicate: "⚠︎",
-  noAssignee: "👤",
+  missingFields: "👤",
 };
 
 const IGNORED_SUBTYPES = new Set(["milestone", "approval", "section"]);
@@ -63,7 +63,7 @@ export async function processTask(taskGid: string): Promise<void> {
     checkName(task, alreadyPosted),
     checkNotes(task, alreadyPosted),
     checkDuplicates(task, trackedProjectGid, existingCommentTexts),
-    checkAssignee(task, alreadyPosted),
+    checkRequiredFields(task, alreadyPosted),
   ]);
 }
 
@@ -131,7 +131,12 @@ async function checkDuplicates(
   }
 }
 
-async function checkAssignee(task: AsanaTask, alreadyPosted: (m: string) => boolean): Promise<void> {
-  if (task.assignee || alreadyPosted(MARKERS.noAssignee)) return;
-  await asana.addComment(task.gid, noAssigneeComment());
+async function checkRequiredFields(task: AsanaTask, alreadyPosted: (m: string) => boolean): Promise<void> {
+  const missingAssignee = !task.assignee;
+  const missingDueDate = !task.due_on;
+  if ((!missingAssignee && !missingDueDate) || alreadyPosted(MARKERS.missingFields)) return;
+
+  const creatorName = (await asana.getTaskCreatorName(task.gid)) ?? "equipo / команда";
+  logger.info("Не хватает обязательных полей", { taskGid: task.gid, missingAssignee, missingDueDate });
+  await asana.addComment(task.gid, missingFieldsComment(creatorName, missingAssignee, missingDueDate));
 }

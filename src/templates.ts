@@ -76,8 +76,29 @@ export function possibleDuplicateComment(params: {
   return `${es}\n\n---\n\n${ru}`;
 }
 
-export function noAssigneeComment(): string {
-  const es = `👤 Esta tarea no tiene responsable asignado.\n¿Quién se encarga de llevarla adelante?`;
-  const ru = `👤 Нет исполнителя. Кто отвечает за эту задачу?`;
+export function missingFieldsComment(
+  creatorName: string,
+  missingAssignee: boolean,
+  missingDueDate: boolean,
+): string {
+  const esMissing = [missingAssignee && "el responsable", missingDueDate && "la fecha límite"]
+    .filter(Boolean)
+    .join(" y ");
+  const esAsk = [missingAssignee && "quién se encarga", missingDueDate && "para cuándo"]
+    .filter(Boolean)
+    .join(" y ");
+
+  const ruMissing = [missingAssignee && "ответственного", missingDueDate && "срока выполнения"]
+    .filter(Boolean)
+    .join(" и ");
+  const ruAsk = [missingAssignee && "кто отвечает", missingDueDate && "к какому сроку"]
+    .filter(Boolean)
+    .join(" и ");
+
+  const es =
+    `👤 ${creatorName}, a esta tarea le falta ${esMissing}.\n\n` + `¿Puedes indicar ${esAsk}? Gracias 🙏`;
+
+  const ru = `👤 ${creatorName}, в задаче не хватает: ${ruMissing}.\n\n` + `Можешь указать, ${ruAsk}?`;
+
   return `${es}\n\n---\n\n${ru}`;
 }
