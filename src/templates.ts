@@ -1,37 +1,26 @@
 /**
- * Шаблоны комментариев и Notes. Комментарии агента — только на испанском
- * (единый язык коммуникации с командой). Notes (описание задачи) остаются
- * двуязычными ES+RU — см. src/rules/notes.ts.
+ * Шаблоны комментариев и Notes. Комментарии агента — компактные и только на
+ * испанском (единый язык коммуникации с командой). Notes (описание задачи)
+ * остаются двуязычными ES+RU — см. src/rules/notes.ts.
  */
 
 export const EMPTY_NOTES_TEMPLATE =
   "[Pendiente de completar — añade el contexto de la tarea aquí]\n\n---\n\n" +
   "[Заполнить описание — добавь контекст задачи]";
 
-export function nameErrorComment(creatorName: string, currentName: string, code: string, reason: string): string {
+export function nameErrorComment(creatorName: string, currentName: string, reason: string): string {
   return (
-    `👋 ${creatorName}, el nombre de la tarea no deja claro qué hay que hacer, así que no me atrevo a ` +
-    `reformularlo yo mismo: ${reason}\n\n` +
-    `Formato correcto: [CODIGO] — [Verbo infinitivo] + complemento\n` +
-    `Ejemplo: ${code} — Obtener presupuesto de movimiento de tierras\n\n` +
-    `Nombre actual: "${currentName}"\n\n` +
-    `¿Puedes aclararlo o corregirlo? Gracias 🙏`
+    `👋 ${creatorName}, no me queda claro qué hay que hacer en "${currentName}" (${reason}). ` +
+    `¿Puedes aclararlo o renombrarla? Formato: [Verbo infinitivo] + complemento.`
   );
 }
 
 export function nameFixedComment(oldName: string, newName: string): string {
-  return (
-    `✏️ El nombre de la tarea no seguía el estándar de Prestige Expo (debe estar en español y con el ` +
-    `formato "[CODIGO] — [Verbo infinitivo] + complemento"), así que lo he corregido manteniendo el ` +
-    `mismo sentido.\n\n` +
-    `Antes: "${oldName}"\n` +
-    `Ahora: "${newName}"\n\n` +
-    `Si no refleja correctamente lo que se necesita, corrígelo libremente.`
-  );
+  return `✏️ Renombrada para seguir el estándar: "${oldName}" → "${newName}". Corrígelo si no es correcto.`;
 }
 
 export function notesTemplateAddedComment(): string {
-  return `📝 Se ha añadido una plantilla de descripción bilingüe (ES/RU).\nPor favor, completa el contexto de la tarea.`;
+  return `📝 Añadida plantilla de descripción (ES/RU) — complétala, por favor.`;
 }
 
 export function possibleDuplicateComment(params: {
@@ -42,13 +31,10 @@ export function possibleDuplicateComment(params: {
   status: string;
 }): string {
   const { similarTaskName, similarTaskLink, assignee, dueDate, status } = params;
-
   return (
-    `⚠︎ Posible tarea duplicada\n\n` +
-    `Tarea similar encontrada:\n"${similarTaskName}" → ${similarTaskLink}\n` +
-    `Responsable: ${assignee} | Vencimiento: ${dueDate} | Estado: ${status}\n\n` +
-    `¿Es una tarea diferente o un duplicado?\n` +
-    `Si es duplicado → cierra esta tarea y continúa en la vinculada.`
+    `⚠︎ Posible duplicado: "${similarTaskName}" → ${similarTaskLink} ` +
+    `(Responsable: ${assignee} | Vencimiento: ${dueDate} | Estado: ${status}). ` +
+    `¿Es otra tarea o se puede cerrar esta y seguir en la vinculada?`
   );
 }
 
@@ -60,9 +46,5 @@ export function missingFieldsComment(
   const missing = [missingAssignee && "el responsable", missingDueDate && "la fecha límite"]
     .filter(Boolean)
     .join(" y ");
-  const ask = [missingAssignee && "quién se encarga", missingDueDate && "para cuándo"]
-    .filter(Boolean)
-    .join(" y ");
-
-  return `👤 ${creatorName}, a esta tarea le falta ${missing}.\n\n¿Puedes indicar ${ask}? Gracias 🙏`;
+  return `👤 ${creatorName}, falta ${missing}. ¿Puedes indicarlo?`;
 }

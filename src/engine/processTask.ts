@@ -68,10 +68,7 @@ export async function processTask(taskGid: string): Promise<void> {
 }
 
 async function checkName(task: AsanaTask, alreadyPosted: (m: string) => boolean): Promise<void> {
-  const project = task.projects.map((p) => findByGid(p.gid)).find(Boolean);
-  const code = project?.code ?? "KOD";
-
-  const result = await checkTaskName(task.name, code);
+  const result = await checkTaskName(task.name);
   if (result.valid) return;
 
   if (result.action === "fix" && result.correctedName) {
@@ -88,9 +85,9 @@ async function checkName(task: AsanaTask, alreadyPosted: (m: string) => boolean)
 
   // action === "ask" — агент не уверен, что имелось в виду, и не угадывает
   if (alreadyPosted(MARKERS.nameError)) return;
-  const creatorName = (await asana.getTaskCreatorName(task.gid)) ?? "equipo / команда";
+  const creatorName = (await asana.getTaskCreatorName(task.gid)) ?? "equipo";
   logger.info("Название неоднозначно — запрошено уточнение", { taskGid: task.gid, reason: result.reason });
-  await asana.addComment(task.gid, nameErrorComment(creatorName, task.name, code, result.reason));
+  await asana.addComment(task.gid, nameErrorComment(creatorName, task.name, result.reason));
 }
 
 async function checkNotes(task: AsanaTask, alreadyPosted: (m: string) => boolean): Promise<void> {
