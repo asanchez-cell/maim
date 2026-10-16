@@ -16,8 +16,6 @@ import {
 const MARKERS = {
   nameError: "👋",
   notesTemplate: "📝",
-  duplicate: "⚠︎",
-  missingFields: "👤",
 };
 
 const IGNORED_SUBTYPES = new Set(["milestone", "approval", "section"]);
@@ -63,7 +61,7 @@ export async function processTask(taskGid: string): Promise<void> {
     checkName(task, alreadyPosted),
     checkNotes(task, alreadyPosted),
     checkDuplicates(task, trackedProjectGid, existingCommentTexts),
-    checkRequiredFields(task, alreadyPosted),
+    checkRequiredFields(task, existingCommentTexts),
   ]);
 }
 
@@ -128,12 +126,20 @@ async function checkDuplicates(
   }
 }
 
-async function checkRequiredFields(task: AsanaTask, alreadyPosted: (m: string) => boolean): Promise<void> {
+async function checkRequiredFields(task: AsanaTask, existingCommentTexts: string[]): Promise<void> {
   const missingAssignee = !task.assignee;
   const missingDueDate = !task.due_on;
-  if ((!missingAssignee && !missingDueDate) || alreadyPosted(MARKERS.missingFields)) return;
+  if (!missingAssignee && !missingDueDate) return;
 
-  const creatorName = (await asana.getTaskCreatorName(task.gid)) ?? "equipo / команда";
+  const creatorName = (await asana.getTaskCreatorName(task.gid)) ?? "equipo";
+  const text = missingFieldsComment(creatorName, missingAssignee, missingDueDate);
+
+  // Сравниваем точный текст, а не просто "маркер уже был": если человек
+  // закрыл только часть (например, назначил исполнителя, но не поставил
+  // срок), набор недостающих полей меняется и это уже другой текст —
+  // агент должен напомнить про оставшееся, а не замолчать навсегда.
+  if (existingCommentTexts.includes(text)) return;
+
   logger.info("Не хватает обязательных полей", { taskGid: task.gid, missingAssignee, missingDueDate });
-  await asana.addComment(task.gid, missingFieldsComment(creatorName, missingAssignee, missingDueDate));
+  await asana.addComment(task.gid, text);
 }
