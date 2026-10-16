@@ -55,6 +55,12 @@ export async function checkMentionsForProject(
     }
 
     const comments = stories.filter((s) => s.type === "comment" || s.resource_subtype === "comment_added");
+    // Несколько ожидающих упоминаний на одной задаче в одном проходе часто
+    // оказываются повторением одной и той же просьбы (как было на практике:
+    // человек дважды просил разделить задачу, потому что первая попытка
+    // упоминания не сработала) — действие (fix/split) выполняется на задаче
+    // не больше одного раза за проход, иначе получаются задачи-дубли.
+    let taskActedOnThisRun = false;
 
     for (const story of comments) {
       if (story.created_by?.gid === botGid) continue;
@@ -74,10 +80,16 @@ export async function checkMentionsForProject(
           question: story.text,
         });
 
-        if (resolution.kind === "fix") {
+        if ((resolution.kind === "fix" || resolution.kind === "split") && taskActedOnThisRun) {
+          resolution.kind = "reply";
+          resolution.reply =
+            "Ya actué sobre esta tarea respondiendo a una mención anterior en esta misma tanda — revisa los " +
+            "comentarios y tareas más recientes.";
+        } else if (resolution.kind === "fix") {
           if (resolution.newName) await asana.updateName(task.gid, resolution.newName);
           if (resolution.newNotes) await asana.updateNotes(task.gid, resolution.newNotes);
           logger.info("Задача исправлена по запросу в упоминании", { taskGid: task.gid, code });
+          taskActedOnThisRun = true;
         } else if (resolution.kind === "split") {
           if (resolution.keepName) await asana.updateName(task.gid, resolution.keepName);
           if (resolution.keepNotes) await asana.updateNotes(task.gid, resolution.keepNotes);
@@ -89,6 +101,7 @@ export async function checkMentionsForProject(
               code,
             });
           }
+          taskActedOnThisRun = true;
         }
 
         const askerGid = story.created_by?.gid;
