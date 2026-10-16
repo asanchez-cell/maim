@@ -123,6 +123,34 @@ export const asana = {
     logger.info("Название задачи исправлено", { taskGid });
   },
 
+  async setAssignee(taskGid: string, assigneeGid: string): Promise<void> {
+    await request(`/tasks/${taskGid}`, {
+      method: "PUT",
+      body: JSON.stringify({ data: { assignee: assigneeGid } }),
+    });
+    logger.info("Исполнитель назначен", { taskGid, assigneeGid });
+  },
+
+  async setDueOn(taskGid: string, dueOn: string): Promise<void> {
+    await request(`/tasks/${taskGid}`, {
+      method: "PUT",
+      body: JSON.stringify({ data: { due_on: dueOn } }),
+    });
+    logger.info("Срок установлен", { taskGid, dueOn });
+  },
+
+  /**
+   * Поиск пользователя воркспейса по имени (для явных запросов вида "назначь
+   * на Лауру" в упоминаниях) — используется только когда совпадение
+   * однозначно; при нескольких/нулевых совпадениях вызывающий код не
+   * назначает никого, а не угадывает.
+   */
+  async findUsersByName(workspaceGid: string, query: string): Promise<{ gid: string; name: string }[]> {
+    return request<{ gid: string; name: string }[]>(
+      `/workspaces/${workspaceGid}/typeahead?resource_type=user&query=${encodeURIComponent(query)}&opt_fields=gid,name`,
+    );
+  },
+
   async createWebhook(resourceGid: string, target: string): Promise<AsanaWebhook> {
     return request<AsanaWebhook>(`/webhooks`, {
       method: "POST",
