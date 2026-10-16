@@ -42,12 +42,19 @@ async function pollProject(projectGid: string, code: string, state: State): Prom
     return;
   }
 
-  // Только "added" — задача только что попала в проект Gestión Operativa.
-  // "changed" намеренно игнорируется: агент не перепроверяет старые задачи
-  // при каждой их правке, только при появлении новых.
+  // "added" — задача только что попала в проект. "changed" — только по
+  // полям, которые агент сам проверяет (name/notes/assignee/due_on): это
+  // позволяет довести до конца недоделанное (например, добавили описание на
+  // испанском, но забыли перевод) без "перетряхивания" задач при любой
+  // правке. processTask идемпотентен — уже решённые проверки просто
+  // пропускаются.
+  const TRACKED_FIELDS = new Set(["name", "notes", "assignee", "due_on", "due_at"]);
   const taskGids = new Set<string>();
   for (const event of result.events) {
-    if (event.resource?.resource_type === "task" && event.action === "added") {
+    if (event.resource?.resource_type !== "task") continue;
+    if (event.action === "added") {
+      taskGids.add(event.resource.gid);
+    } else if (event.action === "changed" && event.change?.field && TRACKED_FIELDS.has(event.change.field)) {
       taskGids.add(event.resource.gid);
     }
   }

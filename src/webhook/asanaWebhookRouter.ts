@@ -11,7 +11,10 @@ const SECRET_FILE = path.join(process.cwd(), ".webhook-secret");
 interface AsanaWebhookEvent {
   action: string;
   resource: { gid: string; resource_type: string; resource_subtype?: string };
+  change?: { field: string; action: string } | null;
 }
+
+const TRACKED_FIELDS = new Set(["name", "notes", "assignee", "due_on", "due_at"]);
 
 interface RequestWithRawBody extends Request {
   rawBody?: Buffer;
@@ -77,12 +80,13 @@ asanaWebhookRouter.post("/webhooks/asana", (req: RequestWithRawBody, res) => {
   // обработка событий идёт асинхронно.
   res.status(200).end();
 
-  // Только "added" — реагируем на появление новой задачи в проекте, не на
-  // правки старых (см. src/scripts/pollProjects.ts).
+  // "added" — новая задача; "changed" — только по отслеживаемым полям
+  // (см. src/scripts/pollProjects.ts, та же логика).
   const events: AsanaWebhookEvent[] = req.body?.events ?? [];
   for (const event of events) {
     if (event.resource?.resource_type !== "task") continue;
-    if (event.action !== "added") continue;
+    const isTrackedChange = event.action === "changed" && event.change?.field && TRACKED_FIELDS.has(event.change.field);
+    if (event.action !== "added" && !isTrackedChange) continue;
 
     processTask(event.resource.gid).catch((err) => {
       logger.error("Ошибка обработки задачи из вебхука", {

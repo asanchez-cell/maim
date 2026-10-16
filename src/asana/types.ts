@@ -43,6 +43,8 @@ export interface AsanaEvent {
   resource: { gid: string; resource_type: string; resource_subtype?: string };
   parent?: { gid: string; resource_type: string } | null;
   created_at: string;
+  /** Присутствует только при action="changed" — какое именно поле изменилось. */
+  change?: { field: string; action: string } | null;
 }
 
 export interface AsanaEventsResult {
