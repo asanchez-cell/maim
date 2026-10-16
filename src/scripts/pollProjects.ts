@@ -3,34 +3,39 @@
  * вебхук-сервера, запускается периодически из GitHub Actions
  * (.github/workflows/poll.yml).
  *
- * Между запусками sync-токен на проект хранится в state/sync-tokens.json и
- * коммитится обратно в репозиторий тем же workflow.
+ * Между запусками sync-токен на проект хранится в state/sync-tokens.json, а
+ * чекпоинты проверки упоминаний (@Asanchez в комментариях) — в
+ * state/mention-checkpoints.json. Оба коммитятся обратно в репозиторий тем
+ * же workflow.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { asana } from "../asana/client";
+import { checkMentionsForProject, type MentionState } from "../engine/answerMentions";
 import { processTask } from "../engine/processTask";
 import { logger } from "../logger";
 import { trackedProjects } from "../projectCodes";
 
-const STATE_FILE = path.join(process.cwd(), "state", "sync-tokens.json");
+const SYNC_STATE_FILE = path.join(process.cwd(), "state", "sync-tokens.json");
+const MENTION_STATE_FILE = path.join(process.cwd(), "state", "mention-checkpoints.json");
 
-type State = Record<string, string>;
+type SyncState = Record<string, string>;
+type MentionsState = Record<string, MentionState>;
 
-function loadState(): State {
+function loadJson<T>(filePath: string, fallback: T): T {
   try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8")) as State;
+    return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
   } catch {
-    return {};
+    return fallback;
   }
 }
 
-function saveState(state: State): void {
-  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
-  fs.writeFileSync(STATE_FILE, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+function saveJson(filePath: string, data: unknown): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
 
-async function pollProject(projectGid: string, code: string, state: State): Promise<void> {
+async function pollProjectEvents(projectGid: string, code: string, state: SyncState): Promise<void> {
   const priorToken = state[projectGid];
   const result = await asana.getEvents(projectGid, priorToken);
 
@@ -78,22 +83,37 @@ async function main(): Promise<void> {
     return;
   }
 
-  const state = loadState();
+  const syncState = loadJson<SyncState>(SYNC_STATE_FILE, {});
+  const mentionsState = loadJson<MentionsState>(MENTION_STATE_FILE, {});
+  const botMe = await asana.getMe();
   let hadErrors = false;
 
   for (const project of projects) {
     try {
-      await pollProject(project.asanaProjectGid, project.code, state);
+      await pollProjectEvents(project.asanaProjectGid, project.code, syncState);
     } catch (err) {
       hadErrors = true;
       logger.error("Ошибка опроса проекта", { code: project.code, err: String(err) });
+    }
+
+    try {
+      mentionsState[project.asanaProjectGid] = await checkMentionsForProject(
+        project.asanaProjectGid,
+        project.code,
+        botMe.gid,
+        mentionsState[project.asanaProjectGid],
+      );
+    } catch (err) {
+      hadErrors = true;
+      logger.error("Ошибка проверки упоминаний в проекте", { code: project.code, err: String(err) });
     }
   }
 
   // Сохраняем прогресс по тем проектам, что опросились успешно, даже если
   // другие упали — но сам запуск workflow должен стать "красным", чтобы
   // ошибка не осталась незамеченной.
-  saveState(state);
+  saveJson(SYNC_STATE_FILE, syncState);
+  saveJson(MENTION_STATE_FILE, mentionsState);
   if (hadErrors) {
     throw new Error("Один или несколько проектов не удалось опросить — подробности в логах выше");
   }

@@ -32,13 +32,13 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-5' }}
 
-      - name: Сохранить sync-токены
+      - name: Сохранить состояние (sync-токены и чекпоинты упоминаний)
         # Коммитим прогресс, даже если предыдущий шаг упал для части проектов —
         # частичный прогресс по остальным всё равно не должен теряться.
         if: always()
         run: |
           git config user.name "asanchez-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add state/sync-tokens.json
+          git add state/sync-tokens.json state/mention-checkpoints.json
           git diff --cached --quiet || git commit -m "chore: update Asana sync state [skip ci]"
           git push

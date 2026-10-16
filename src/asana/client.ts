@@ -65,6 +65,21 @@ export const asana = {
     return tasks;
   },
 
+  /** Задачи проекта, изменённые после `since` — нужно для поиска новых комментариев (раздел про упоминания). */
+  async getTasksModifiedSince(projectGid: string, since: string): Promise<AsanaTask[]> {
+    const tasks: AsanaTask[] = [];
+    let path: string | null =
+      `/tasks?project=${projectGid}&modified_since=${encodeURIComponent(since)}&opt_fields=${TASK_OPT_FIELDS}&limit=100`;
+
+    while (path) {
+      const res: { data: AsanaTask[]; next_page: { path: string } | null } = await requestPage(path);
+      tasks.push(...res.data);
+      path = res.next_page ? res.next_page.path.replace(BASE_URL, "") : null;
+    }
+
+    return tasks;
+  },
+
   async addComment(taskGid: string, text: string): Promise<void> {
     await request(`/tasks/${taskGid}/stories`, {
       method: "POST",
@@ -88,7 +103,7 @@ export const asana = {
 
   async getStories(taskGid: string): Promise<AsanaStory[]> {
     return request<AsanaStory[]>(
-      `/tasks/${taskGid}/stories?opt_fields=type,resource_subtype,text,created_at,created_by.gid,created_by.name`,
+      `/tasks/${taskGid}/stories?opt_fields=type,resource_subtype,text,html_text,created_at,created_by.gid,created_by.name`,
     );
   },
 
@@ -117,6 +132,11 @@ export const asana = {
 
   async listWebhooks(workspaceGid: string): Promise<AsanaWebhook[]> {
     return request<AsanaWebhook[]>(`/webhooks?workspace=${workspaceGid}`);
+  },
+
+  /** Собственный пользователь токена — нужен, чтобы узнать свой gid (для обнаружения упоминаний бота). */
+  async getMe(): Promise<{ gid: string; name: string }> {
+    return request<{ gid: string; name: string }>(`/users/me?opt_fields=gid,name`);
   },
 
   async getWorkspaceGid(): Promise<string> {

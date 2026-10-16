@@ -27,6 +27,7 @@ export interface AsanaStory {
   type: string;
   resource_subtype: string;
   text: string;
+  html_text?: string;
   created_at: string;
   created_by: AsanaUserRef | null;
 }

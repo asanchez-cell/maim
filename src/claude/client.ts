@@ -134,3 +134,49 @@ export async function judgeDuplicatePair(
       `Задача B: "${taskB.name}"\nОписание B: ${taskB.notes || "(пусто)"}`,
   );
 }
+
+/**
+ * Отвечает на упоминание агента (@Asanchez) в комментарии задачи. Только
+ * текстовый ответ — агент не предпринимает действий (не переименовывает, не
+ * назначает и т.д.) в рамках ответа на упоминание, только поясняет/советует
+ * на основе контекста задачи.
+ */
+export async function answerMention(params: {
+  taskName: string;
+  taskNotes: string;
+  recentComments: string[];
+  question: string;
+}): Promise<string> {
+  const { taskName, taskNotes, recentComments, question } = params;
+  const response = await anthropic.messages.create({
+    model: config.anthropic.model,
+    max_tokens: 512,
+    system: `Ты Asanchez — агент, который следит за единым стандартом задач в Asana (Gestión Operativa,
+Prestige Expo). Тебя упомянули (@Asanchez) в комментарии задачи с вопросом или просьбой.
+
+Отвечай кратко и по делу, только на испанском, опираясь только на контекст задачи ниже — ничего не
+придумывай сверх того, что в нём есть. Если вопрос без контекста непонятен (например, просто "уточни" без
+уточнения, что именно) — посмотри на свои предыдущие комментарии в этой задаче: скорее всего, вопрос
+относится к ним. Если и так неясно — переспроси коротко, что именно нужно уточнить.
+
+Ты НЕ выполняешь действия в рамках этого ответа (не переименовываешь, не назначаешь исполнителя и т.п.) —
+только отвечаешь текстом. Если для ответа нужно действие, опиши, что ты бы сделал, и предложи подтвердить.
+
+Отвечай только текстом ответа, без вступлений вроде "Ответ:".`,
+    messages: [
+      {
+        role: "user",
+        content:
+          `Задача: "${taskName}"\nОписание: ${taskNotes || "(пусто)"}\n\n` +
+          `Недавние комментарии (от старых к новым):\n${recentComments.join("\n---\n") || "(нет)"}\n\n` +
+          `Вопрос в новом комментарии: "${question}"`,
+      },
+    ],
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Claude не вернул ответ на упоминание");
+  }
+  return textBlock.text.trim();
+}
