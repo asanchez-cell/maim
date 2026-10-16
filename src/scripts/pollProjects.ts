@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { asana } from "../asana/client";
-import { checkMentionsForProject, type MentionState } from "../engine/answerMentions";
+import { checkMentionsForProject } from "../engine/answerMentions";
 import { processTask } from "../engine/processTask";
 import { logger } from "../logger";
 import { trackedProjects } from "../projectCodes";
@@ -20,7 +20,7 @@ const SYNC_STATE_FILE = path.join(process.cwd(), "state", "sync-tokens.json");
 const MENTION_STATE_FILE = path.join(process.cwd(), "state", "mention-checkpoints.json");
 
 type SyncState = Record<string, string>;
-type MentionsState = Record<string, MentionState>;
+type MentionsState = Record<string, string[]>;
 
 function loadJson<T>(filePath: string, fallback: T): T {
   try {
@@ -85,6 +85,11 @@ async function main(): Promise<void> {
 
   const syncState = loadJson<SyncState>(SYNC_STATE_FILE, {});
   const mentionsState = loadJson<MentionsState>(MENTION_STATE_FILE, {});
+  // Защита от старого формата файла (раньше это был { checkedUntil, answeredCommentGids }
+  // объект на проект, теперь — просто массив gid) — игнорируем, если форма не совпадает.
+  for (const key of Object.keys(mentionsState)) {
+    if (!Array.isArray(mentionsState[key])) delete mentionsState[key];
+  }
   const botMe = await asana.getMe();
   let hadErrors = false;
 

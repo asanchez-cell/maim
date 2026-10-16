@@ -14,10 +14,10 @@ function extractJson(text: string): unknown {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-async function askJson<T>(system: string, user: string): Promise<T> {
+async function askJson<T>(system: string, user: string, maxTokens = 512): Promise<T> {
   const response = await anthropic.messages.create({
     model: config.anthropic.model,
-    max_tokens: 512,
+    max_tokens: maxTokens,
     system,
     messages: [{ role: "user", content: user }],
   });
@@ -190,12 +190,16 @@ Expo: названия на испанском в формате "[Verbo infinit
 kind="reply" с объяснением, что это делает человек.
 
 reply — всегда короткий текст на испанском: ответ на вопрос, или объяснение, что сделано (для fix/split),
-или что именно нужно уточнить.
+или что именно нужно уточнить. Описания (newNotes/keepNotes/notes в newTasks) — 1-2 коротких предложения,
+без лишних деталей.
 
 Отвечай СТРОГО JSON: {"kind": "reply"|"fix"|"split", "reply": "...", "newName"?: "...", "newNotes"?: "...",
 "keepName"?: "...", "keepNotes"?: "...", "newTasks"?: [{"name": "...", "notes"?: "..."}]}`,
     `Задача: "${taskName}"\nОписание: ${taskNotes || "(пусто)"}\n\n` +
       `Недавние комментарии (от старых к новым):\n${recentComments.join("\n---\n") || "(нет)"}\n\n` +
       `Новый комментарий с упоминанием: "${question}"`,
+    // Ответ может включать reply + названия/описания для fix/split (вплоть до нескольких новых задач) —
+    // 512 токенов по умолчанию не хватает и обрезает JSON на середине.
+    1536,
   );
 }

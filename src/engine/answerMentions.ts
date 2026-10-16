@@ -2,13 +2,9 @@ import { resolveMention } from "../claude/client";
 import { asana } from "../asana/client";
 import { logger } from "../logger";
 
-export interface MentionState {
-  checkedUntil: string;
-  answeredCommentGids: string[];
-}
-
 const MAX_TRACKED_COMMENT_GIDS = 300;
 const MAX_CONTEXT_COMMENTS = 6;
+const LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 function mentionsUser(htmlText: string | undefined, userGid: string): boolean {
   if (!htmlText) return false;
@@ -16,23 +12,29 @@ function mentionsUser(htmlText: string | undefined, userGid: string): boolean {
 }
 
 /**
- * Проверяет задачи проекта, изменённые с последней проверки, на новые
+ * Проверяет задачи проекта, изменённые за последние 24 часа, на новые
  * комментарии с упоминанием бота, и реагирует на каждое: либо отвечает
  * текстом, либо выполняет явно и однозначно запрошенное действие
  * (поправить название/описание, разделить задачу на две) — см.
  * src/claude/client.ts resolveMention. Events API не даёт событий по новым
  * комментариям напрямую, поэтому используется отдельный проход по
  * "modified_since" вместо sync-токена.
+ *
+ * Идемпотентность — только через answeredCommentGids (упоминание
+ * помечается отвеченным исключительно при успешной публикации ответа).
+ * Окно сканирования — фиксированные последние 24 часа от "сейчас", не
+ * чекпоинт: так неудачная попытка (например, сбой API) не "теряет"
+ * упоминание навсегда, если потом никто больше не тронет задачу — оно
+ * просто попадёт в скан на следующем опросе, пока его не отработают.
  */
 export async function checkMentionsForProject(
   projectGid: string,
   code: string,
   botGid: string,
-  state: MentionState | undefined,
-): Promise<MentionState> {
-  const since = state?.checkedUntil ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const answeredCommentGids = new Set(state?.answeredCommentGids ?? []);
-  const checkStartedAt = new Date().toISOString();
+  answeredSoFar: string[] | undefined,
+): Promise<string[]> {
+  const answeredCommentGids = new Set(answeredSoFar ?? []);
+  const since = new Date(Date.now() - LOOKBACK_MS).toISOString();
 
   const tasks = await asana.getTasksModifiedSince(projectGid, since);
   let answered = 0;
@@ -57,7 +59,6 @@ export async function checkMentionsForProject(
     for (const story of comments) {
       if (story.created_by?.gid === botGid) continue;
       if (answeredCommentGids.has(story.gid)) continue;
-      if (story.created_at <= since) continue;
       if (!mentionsUser(story.html_text, botGid)) continue;
 
       const recentComments = comments
@@ -97,6 +98,10 @@ export async function checkMentionsForProject(
           await asana.addComment(task.gid, resolution.reply);
         }
 
+        // Помечаем отвеченным только после успешной публикации — иначе
+        // сбой (например, Claude не уложился в лимит токенов) навсегда
+        // "съедал" бы упоминание без ответа.
+        answeredCommentGids.add(story.gid);
         logger.info("Ответ на упоминание опубликован", {
           taskGid: task.gid,
           code,
@@ -105,15 +110,13 @@ export async function checkMentionsForProject(
         });
         answered++;
       } catch (err) {
-        logger.error("Ошибка при обработке упоминания", {
+        logger.error("Ошибка при обработке упоминания — попробуем снова на следующем опросе", {
           taskGid: task.gid,
           code,
           commentGid: story.gid,
           err: String(err),
         });
       }
-
-      answeredCommentGids.add(story.gid);
     }
   }
 
@@ -121,6 +124,5 @@ export async function checkMentionsForProject(
     logger.info("Проверка упоминаний завершена", { code, tasksChecked: tasks.length, answered });
   }
 
-  const trimmedGids = [...answeredCommentGids].slice(-MAX_TRACKED_COMMENT_GIDS);
-  return { checkedUntil: checkStartedAt, answeredCommentGids: trimmedGids };
+  return [...answeredCommentGids].slice(-MAX_TRACKED_COMMENT_GIDS);
 }
