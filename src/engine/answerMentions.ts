@@ -1,4 +1,4 @@
-import { answerMention } from "../claude/client";
+import { resolveMention } from "../claude/client";
 import { asana } from "../asana/client";
 import { logger } from "../logger";
 
@@ -17,9 +17,11 @@ function mentionsUser(htmlText: string | undefined, userGid: string): boolean {
 
 /**
  * Проверяет задачи проекта, изменённые с последней проверки, на новые
- * комментарии с упоминанием бота, и отвечает на них одним компактным
- * комментарием (с упоминанием спросившего). Events API не даёт событий по
- * новым комментариям напрямую, поэтому используется отдельный проход по
+ * комментарии с упоминанием бота, и реагирует на каждое: либо отвечает
+ * текстом, либо выполняет явно и однозначно запрошенное действие
+ * (поправить название/описание, разделить задачу на две) — см.
+ * src/claude/client.ts resolveMention. Events API не даёт событий по новым
+ * комментариям напрямую, поэтому используется отдельный проход по
  * "modified_since" вместо sync-токена.
  */
 export async function checkMentionsForProject(
@@ -64,24 +66,46 @@ export async function checkMentionsForProject(
         .map((s) => s.text);
 
       try {
-        const answer = await answerMention({
+        const resolution = await resolveMention({
           taskName: task.name,
           taskNotes: task.notes,
           recentComments,
           question: story.text,
         });
 
-        const askerGid = story.created_by?.gid;
-        if (askerGid) {
-          await asana.addMentionComment(task.gid, askerGid, answer);
-        } else {
-          await asana.addComment(task.gid, answer);
+        if (resolution.kind === "fix") {
+          if (resolution.newName) await asana.updateName(task.gid, resolution.newName);
+          if (resolution.newNotes) await asana.updateNotes(task.gid, resolution.newNotes);
+          logger.info("Задача исправлена по запросу в упоминании", { taskGid: task.gid, code });
+        } else if (resolution.kind === "split") {
+          if (resolution.keepName) await asana.updateName(task.gid, resolution.keepName);
+          if (resolution.keepNotes) await asana.updateNotes(task.gid, resolution.keepNotes);
+          for (const newTask of resolution.newTasks ?? []) {
+            const created = await asana.createTask(projectGid, newTask.name, newTask.notes ?? "");
+            logger.info("Создана задача при разделении по запросу в упоминании", {
+              taskGid: task.gid,
+              newTaskGid: created.gid,
+              code,
+            });
+          }
         }
 
-        logger.info("Ответ на упоминание опубликован", { taskGid: task.gid, code, commentGid: story.gid });
+        const askerGid = story.created_by?.gid;
+        if (askerGid) {
+          await asana.addMentionComment(task.gid, askerGid, resolution.reply);
+        } else {
+          await asana.addComment(task.gid, resolution.reply);
+        }
+
+        logger.info("Ответ на упоминание опубликован", {
+          taskGid: task.gid,
+          code,
+          commentGid: story.gid,
+          kind: resolution.kind,
+        });
         answered++;
       } catch (err) {
-        logger.error("Ошибка при ответе на упоминание", {
+        logger.error("Ошибка при обработке упоминания", {
           taskGid: task.gid,
           code,
           commentGid: story.gid,
