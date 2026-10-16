@@ -29,42 +29,48 @@ async function askJson<T>(system: string, user: string): Promise<T> {
   return extractJson(textBlock.text) as T;
 }
 
-/**
- * Проверяет, что текст после кода/дефиса — это испанский глагол в инфинитиве
- * с дополнением (раздел 1: "[Verbo en infinitivo] + complemento").
- */
-export async function verifyVerbInfinitiveComplement(
-  textAfterDash: string,
-): Promise<{ ok: boolean; reason: string }> {
-  return askJson(
-    `Ты проверяешь названия задач Prestige Expo на соответствие формату:
-"[Verbo en infinitivo] + complemento" (испанский глагол в инфинитиве + дополнение).
-Отвечай СТРОГО JSON без пояснений вне JSON: {"ok": true|false, "reason": "краткое объяснение на русском"}.
-ok=true только если первое слово — реальный испанский глагол в инфинитиве (оканчивается на -ar/-er/-ir и
-является настоящим глаголом, а не существительным вроде "factura" или "actas"), и после него идёт
-осмысленное дополнение (не пустое, не просто существительное само по себе).`,
-    `Текст для проверки: "${textAfterDash}"`,
-  );
+export interface NameEvaluation {
+  valid: boolean;
+  action: "none" | "fix" | "ask";
+  correctedName?: string;
+  reason: string;
 }
 
 /**
- * Классифицирует полное название задачи: соответствует ли оно одному из
- * известных форматов, если это не удалось определить регулярными выражениями.
+ * Единый стандарт названий задач Gestión Operativa: "[KOD] — [Verbo en
+ * infinitivo] + complemento" — точно и ясно описывает, что нужно сделать.
+ *
+ * Если название не соответствует, Claude решает:
+ *  - "fix" — суть задачи понятна из текущего названия, можно уверенно
+ *    переформулировать по стандарту, ничего не домысливая сверх того, что
+ *    буквально в нём есть;
+ *  - "ask" — название слишком расплывчатое/двусмысленное, чтобы уверенно
+ *    понять суть (например, одно слово или просто тема письма) — агент не
+ *    угадывает и просит автора задачи уточнить.
  */
-export async function classifyAmbiguousTaskName(
-  name: string,
-  knownCodes: string[],
-): Promise<{ ok: boolean; reason: string }> {
+export async function evaluateAndFixTaskName(currentName: string, code: string): Promise<NameEvaluation> {
   return askJson(
-    `Ты проверяешь названия задач Asana компании Prestige Expo. Допустимые форматы:
-1) "[KOD] — [Verbo en infinitivo] + complemento" — KOD один из: ${knownCodes.join(", ")}
-2) "YYMMDD | YYMM_CODIGO | EMPRESA | Tipo" где Tipo один из: Weekly Management, Design Coordination,
-   Construction, Technical, Commercial, Internal, Other — это протокол встречи (Acta de Reunión)
-3) "[Categoria] — [действие]" — подзадача-соглашение протокола встречи
-Отвечай СТРОГО JSON: {"ok": true|false, "reason": "краткое объяснение на русском"}.
-ok=false, если название — это просто существительное без глагола-действия, тема письма, или не имеет
-чёткой структуры "код/дата — действие".`,
-    `Название задачи: "${name}"`,
+    `Ты следишь за единым стандартом названий задач в проекте Asana "Gestión Operativa" компании
+Prestige Expo (код этого проекта: "${code}").
+
+Обязательный формат: "${code} — [Verbo en infinitivo] + complemento" — испанский глагол в инфинитиве
+(оканчивается на -ar/-er/-ir, это настоящий глагол, а не существительное вроде "factura"), затем точное
+и ясное дополнение, однозначно описывающее, что именно нужно сделать.
+
+Правила:
+1. valid=true, action="none" — если название уже полностью соответствует формату и ясно описывает
+   конкретное действие.
+2. Если не соответствует, но из текущего текста МОЖНО уверенно понять, что имелось в виду (например,
+   "Factura electricidad Viña Chica" явно означает обработку/оплату счёта за электричество этого
+   объекта) — action="fix", предложи correctedName в правильном формате "${code} — ...", сохранив весь
+   смысл оригинала и ничего не добавляя от себя сверх буквально сказанного.
+3. Если название слишком расплывчатое, состоит из одного слова/аббревиатуры/номера, или по нему нельзя
+   уверенно понять суть задачи — action="ask", НЕ придумывай correctedName, объясни в reason, что именно
+   неясно.
+
+Отвечай СТРОГО JSON: {"valid": true|false, "action": "none"|"fix"|"ask", "correctedName": "..." (только
+при action="fix", иначе опусти поле), "reason": "кратко на русском"}.`,
+    `Текущее название задачи: "${currentName}"`,
   );
 }
 

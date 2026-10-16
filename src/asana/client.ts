@@ -83,6 +83,14 @@ export const asana = {
     logger.info("Описание задачи обновлено", { taskGid });
   },
 
+  async updateName(taskGid: string, name: string): Promise<void> {
+    await request(`/tasks/${taskGid}`, {
+      method: "PUT",
+      body: JSON.stringify({ data: { name } }),
+    });
+    logger.info("Название задачи исправлено", { taskGid });
+  },
+
   async createWebhook(resourceGid: string, target: string): Promise<AsanaWebhook> {
     return request<AsanaWebhook>(`/webhooks`, {
       method: "POST",

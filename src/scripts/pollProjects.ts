@@ -42,9 +42,12 @@ async function pollProject(projectGid: string, code: string, state: State): Prom
     return;
   }
 
+  // Только "added" — задача только что попала в проект Gestión Operativa.
+  // "changed" намеренно игнорируется: агент не перепроверяет старые задачи
+  // при каждой их правке, только при появлении новых.
   const taskGids = new Set<string>();
   for (const event of result.events) {
-    if (event.resource?.resource_type === "task" && (event.action === "added" || event.action === "changed")) {
+    if (event.resource?.resource_type === "task" && event.action === "added") {
       taskGids.add(event.resource.gid);
     }
   }

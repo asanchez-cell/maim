@@ -59,7 +59,3 @@ export function findByGid(projectGid: string): ProjectCodeEntry | undefined {
 export function findByCode(code: string): ProjectCodeEntry | undefined {
   return entries.find((p) => p.code === code);
 }
-
-export function allKnownCodes(): string[] {
-  return entries.map((p) => p.code);
-}

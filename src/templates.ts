@@ -7,20 +7,39 @@ export const EMPTY_NOTES_TEMPLATE =
   "[Pendiente de completar — añade el contexto de la tarea aquí]\n\n---\n\n" +
   "[Заполнить описание — добавь контекст задачи]";
 
-export function nameErrorComment(creatorName: string, currentName: string, code: string): string {
+export function nameErrorComment(creatorName: string, currentName: string, code: string, reason: string): string {
   const es =
-    `👋 ${creatorName}, el nombre de la tarea no sigue el estándar de Prestige Expo.\n\n` +
+    `👋 ${creatorName}, el nombre de la tarea no deja claro qué hay que hacer, así que no me atrevo a ` +
+    `reformularlo yo mismo: ${reason}\n\n` +
     `Formato correcto: [CODIGO] — [Verbo infinitivo] + complemento\n` +
     `Ejemplo: ${code} — Obtener presupuesto de movimiento de tierras\n\n` +
     `Nombre actual: "${currentName}"\n\n` +
-    `Por favor, ¿puedes corregirlo? Gracias 🙏`;
+    `¿Puedes aclararlo o corregirlo? Gracias 🙏`;
 
   const ru =
-    `👋 ${creatorName}, название задачи не соответствует стандарту Prestige Expo.\n\n` +
+    `👋 ${creatorName}, по названию задачи не могу понять, что именно нужно сделать, поэтому не ` +
+    `переформулирую сам: ${reason}\n\n` +
     `Правильный формат: [KOD] — [Глагол в инфинитиве] + дополнение\n` +
     `Пример: ${code} — Получить смету на земляные работы\n\n` +
     `Текущее: "${currentName}"\n\n` +
-    `Можем исправить?`;
+    `Можешь уточнить или поправить?`;
+
+  return `${es}\n\n---\n\n${ru}`;
+}
+
+export function nameFixedComment(oldName: string, newName: string): string {
+  const es =
+    `✏️ El nombre de la tarea no seguía el estándar de Prestige Expo, así que lo he corregido ` +
+    `manteniendo el mismo sentido.\n\n` +
+    `Antes: "${oldName}"\n` +
+    `Ahora: "${newName}"\n\n` +
+    `Si no refleja correctamente lo que se necesita, corrígelo libremente.`;
+
+  const ru =
+    `✏️ Название задачи не соответствовало стандарту Prestige Expo, поэтому я поправил его, сохранив смысл.\n\n` +
+    `Было: "${oldName}"\n` +
+    `Стало: "${newName}"\n\n` +
+    `Если это не то, что имелось в виду — поправь, как считаешь нужным.`;
 
   return `${es}\n\n---\n\n${ru}`;
 }

@@ -7,6 +7,7 @@ import { checkTaskName } from "../rules/nameFormat";
 import { reconcileNotes } from "../rules/notes";
 import {
   nameErrorComment,
+  nameFixedComment,
   noAssigneeComment,
   notesTemplateAddedComment,
   possibleDuplicateComment,
@@ -22,10 +23,17 @@ const MARKERS = {
 const IGNORED_SUBTYPES = new Set(["milestone", "approval", "section"]);
 
 /**
- * Раздел 5: дерево решений агента для одной задачи. Все проверки
- * независимы (раздел 2), поэтому выполняются в одном проходе — сбой
- * одной не блокирует остальные. Агент только комментирует/дополняет,
- * никогда не переименовывает, не закрывает, не удаляет и не переназначает.
+ * Дерево решений агента для одной новой задачи Gestión Operativa. Все
+ * проверки независимы, выполняются в одном проходе — сбой одной не
+ * блокирует остальные.
+ *
+ * Название: если формат не соблюдён, но суть задачи понятна из текста —
+ * агент сам переименовывает (с прозрачным комментарием); если понять суть
+ * нельзя — не угадывает, а спрашивает автора.
+ * Описание: сам дополняет недостающий язык перевода, никогда не
+ * переписывает то, что уже написано.
+ * Во всём остальном агент не закрывает, не удаляет и не переназначает
+ * задачи — только комментирует.
  */
 export async function processTask(taskGid: string): Promise<void> {
   const task = await asana.getTask(taskGid);
@@ -60,15 +68,29 @@ export async function processTask(taskGid: string): Promise<void> {
 }
 
 async function checkName(task: AsanaTask, alreadyPosted: (m: string) => boolean): Promise<void> {
-  const result = await checkTaskName(task);
-  if (result.valid || alreadyPosted(MARKERS.nameError)) return;
-
   const project = task.projects.map((p) => findByGid(p.gid)).find(Boolean);
   const code = project?.code ?? "KOD";
-  const creatorName = (await asana.getTaskCreatorName(task.gid)) ?? "equipo / команда";
 
-  logger.info("Название не соответствует формату", { taskGid: task.gid, reason: result.reason });
-  await asana.addComment(task.gid, nameErrorComment(creatorName, task.name, code));
+  const result = await checkTaskName(task.name, code);
+  if (result.valid) return;
+
+  if (result.action === "fix" && result.correctedName) {
+    const oldName = task.name;
+    await asana.updateName(task.gid, result.correctedName);
+    logger.info("Название исправлено автоматически", {
+      taskGid: task.gid,
+      oldName,
+      newName: result.correctedName,
+    });
+    await asana.addComment(task.gid, nameFixedComment(oldName, result.correctedName));
+    return;
+  }
+
+  // action === "ask" — агент не уверен, что имелось в виду, и не угадывает
+  if (alreadyPosted(MARKERS.nameError)) return;
+  const creatorName = (await asana.getTaskCreatorName(task.gid)) ?? "equipo / команда";
+  logger.info("Название неоднозначно — запрошено уточнение", { taskGid: task.gid, reason: result.reason });
+  await asana.addComment(task.gid, nameErrorComment(creatorName, task.name, code, result.reason));
 }
 
 async function checkNotes(task: AsanaTask, alreadyPosted: (m: string) => boolean): Promise<void> {

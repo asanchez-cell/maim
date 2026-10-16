@@ -77,10 +77,12 @@ asanaWebhookRouter.post("/webhooks/asana", (req: RequestWithRawBody, res) => {
   // обработка событий идёт асинхронно.
   res.status(200).end();
 
+  // Только "added" — реагируем на появление новой задачи в проекте, не на
+  // правки старых (см. src/scripts/pollProjects.ts).
   const events: AsanaWebhookEvent[] = req.body?.events ?? [];
   for (const event of events) {
     if (event.resource?.resource_type !== "task") continue;
-    if (event.action !== "added" && event.action !== "changed") continue;
+    if (event.action !== "added") continue;
 
     processTask(event.resource.gid).catch((err) => {
       logger.error("Ошибка обработки задачи из вебхука", {
