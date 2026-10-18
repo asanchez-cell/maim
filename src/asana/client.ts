@@ -140,15 +140,16 @@ export const asana = {
   },
 
   /**
-   * Поиск пользователя воркспейса по имени (для явных запросов вида "назначь
-   * на Лауру" в упоминаниях) — используется только когда совпадение
-   * однозначно; при нескольких/нулевых совпадениях вызывающий код не
-   * назначает никого, а не угадывает.
+   * Участники проекта — для резолвинга имени, названного в упоминании
+   * ("назначь на Лауру"), только среди реально работающих над этим
+   * проектом людей, а не по всему воркспейсу (где тёзок/похожих имён может
+   * быть много).
    */
-  async findUsersByName(workspaceGid: string, query: string): Promise<{ gid: string; name: string }[]> {
-    return request<{ gid: string; name: string }[]>(
-      `/workspaces/${workspaceGid}/typeahead?resource_type=user&query=${encodeURIComponent(query)}&opt_fields=gid,name`,
+  async getProjectMembers(projectGid: string): Promise<{ gid: string; name: string }[]> {
+    const project = await request<{ members: { gid: string; name: string }[] }>(
+      `/projects/${projectGid}?opt_fields=members.gid,members.name`,
     );
+    return project.members ?? [];
   },
 
   async createWebhook(resourceGid: string, target: string): Promise<AsanaWebhook> {

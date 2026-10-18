@@ -13,35 +13,24 @@ function mentionsUser(htmlText: string | undefined, userGid: string): boolean {
 
 /**
  * Применяет явно названные человеком исполнителя/срок к задаче — но только
- * когда это можно сделать без угадывания: имя резолвится через реальный
- * справочник пользователей воркспейса (ровно одно совпадение), срок —
- * только если был указан явно (dueInDays). Возвращает короткую строку
- * статуса (что сделано или почему нет) для добавления к ответу, либо null,
- * если подсказок не было вовсе.
+ * когда это можно сделать без угадывания: assigneeGid уже резолвлен в
+ * resolveMention исключительно среди участников проекта (ровно одно
+ * совпадение имени/уменьшительного имени), срок — только если был указан
+ * явно (dueInDays). Возвращает короткую строку статуса (что сделано) для
+ * добавления к ответу, либо null, если подсказок не было вовсе.
  */
 async function applyAssignmentHints(
   taskGid: string,
   hints: TaskAssignmentHints | undefined,
-  workspaceGid: string,
+  projectMembers: { gid: string; name: string }[],
 ): Promise<string | null> {
-  if (!hints || (!hints.assigneeName && hints.dueInDays === undefined)) return null;
+  if (!hints || (!hints.assigneeGid && hints.dueInDays === undefined)) return null;
   const notes: string[] = [];
 
-  if (hints.assigneeName) {
-    try {
-      const matches = await asana.findUsersByName(workspaceGid, hints.assigneeName);
-      if (matches.length === 1) {
-        await asana.setAssignee(taskGid, matches[0].gid);
-        notes.push(`Asignado a ${matches[0].name}.`);
-      } else if (matches.length === 0) {
-        notes.push(`No encontré a "${hints.assigneeName}" en el workspace — asígnalo manualmente.`);
-      } else {
-        notes.push(`Hay varias personas que coinciden con "${hints.assigneeName}" — asígnalo manualmente.`);
-      }
-    } catch (err) {
-      logger.error("Ошибка поиска пользователя для назначения", { taskGid, err: String(err) });
-      notes.push(`No pude buscar a "${hints.assigneeName}" — asígnalo manualmente.`);
-    }
+  if (hints.assigneeGid) {
+    const member = projectMembers.find((m) => m.gid === hints.assigneeGid);
+    await asana.setAssignee(taskGid, hints.assigneeGid);
+    notes.push(`Asignado a ${member?.name ?? "usuario"}.`);
   }
 
   if (typeof hints.dueInDays === "number" && Number.isFinite(hints.dueInDays)) {
@@ -76,7 +65,6 @@ export async function checkMentionsForProject(
   projectGid: string,
   code: string,
   botGid: string,
-  workspaceGid: string,
   answeredSoFar: string[] | undefined,
 ): Promise<string[]> {
   const answeredCommentGids = new Set(answeredSoFar ?? []);
@@ -84,6 +72,7 @@ export async function checkMentionsForProject(
 
   const tasks = await asana.getTasksModifiedSince(projectGid, since);
   let answered = 0;
+  let projectMembers: { gid: string; name: string }[] | null = null;
 
   for (const task of tasks) {
     if (task.completed) continue;
@@ -119,11 +108,16 @@ export async function checkMentionsForProject(
         .map((s) => s.text);
 
       try {
+        if (!projectMembers) {
+          projectMembers = await asana.getProjectMembers(projectGid);
+        }
+
         const resolution = await resolveMention({
           taskName: task.name,
           taskNotes: task.notes,
           recentComments,
           question: story.text,
+          projectMembers,
         });
 
         const statusNotes: string[] = [];
@@ -136,14 +130,14 @@ export async function checkMentionsForProject(
         } else if (resolution.kind === "fix") {
           if (resolution.newName) await asana.updateName(task.gid, resolution.newName);
           if (resolution.newNotes) await asana.updateNotes(task.gid, resolution.newNotes);
-          const status = await applyAssignmentHints(task.gid, resolution.fixAssignment, workspaceGid);
+          const status = await applyAssignmentHints(task.gid, resolution.fixAssignment, projectMembers);
           if (status) statusNotes.push(status);
           logger.info("Задача исправлена по запросу в упоминании", { taskGid: task.gid, code });
           taskActedOnThisRun = true;
         } else if (resolution.kind === "split") {
           if (resolution.keepName) await asana.updateName(task.gid, resolution.keepName);
           if (resolution.keepNotes) await asana.updateNotes(task.gid, resolution.keepNotes);
-          const keepStatus = await applyAssignmentHints(task.gid, resolution.keepAssignment, workspaceGid);
+          const keepStatus = await applyAssignmentHints(task.gid, resolution.keepAssignment, projectMembers);
           if (keepStatus) statusNotes.push(keepStatus);
 
           for (const newTask of resolution.newTasks ?? []) {
@@ -155,10 +149,12 @@ export async function checkMentionsForProject(
             });
             const newStatus = await applyAssignmentHints(
               created.gid,
-              { assigneeName: newTask.assigneeName, dueInDays: newTask.dueInDays },
-              workspaceGid,
+              { assigneeGid: newTask.assigneeGid, dueInDays: newTask.dueInDays },
+              projectMembers,
             );
-            if (newStatus) statusNotes.push(`"${newTask.name}": ${newStatus}`);
+            statusNotes.push(
+              `"${newTask.name}" → ${created.permalink_url}${newStatus ? ` ${newStatus}` : ""}`,
+            );
           }
           taskActedOnThisRun = true;
         }

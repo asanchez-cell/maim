@@ -137,10 +137,11 @@ export async function judgeDuplicatePair(
 
 export interface TaskAssignmentHints {
   /**
-   * Имя, явно названное человеком (например "Laura") — агент не угадывает, кто это: резолвится кодом
-   * через реальный справочник пользователей Asana, назначается только при однозначном совпадении.
+   * gid участника ИЗ переданного списка участников проекта — только если имя, названное человеком,
+   * однозначно соответствует ровно одному из них (учитывая уменьшительные имена: Наташа = Nataliia и
+   * т.п.). Если неоднозначно или такого участника нет в списке — не угадывать, оставить пустым.
    */
-  assigneeName?: string;
+  assigneeGid?: string;
   /** Срок, явно указанный человеком, в днях от сегодня (например "через неделю" → 7). */
   dueInDays?: number;
 }
@@ -177,8 +178,10 @@ export async function resolveMention(params: {
   taskNotes: string;
   recentComments: string[];
   question: string;
+  projectMembers: { gid: string; name: string }[];
 }): Promise<MentionResolution> {
-  const { taskName, taskNotes, recentComments, question } = params;
+  const { taskName, taskNotes, recentComments, question, projectMembers } = params;
+  const membersList = projectMembers.map((m) => `${m.gid}: ${m.name}`).join("\n") || "(список пуст)";
   return askJson(
     `Ты Asanchez — агент, который следит за единым стандартом задач в Asana (Gestión Operativa, Prestige
 Expo: названия на испанском в формате "[Verbo infinitivo] + complemento"). Тебя упомянули (@Asanchez) в
@@ -198,13 +201,21 @@ Expo: названия на испанском в формате "[Verbo infinit
 Если не хватает однозначной уверенности в деталях — НЕ действуй, используй kind="reply" с уточняющим
 вопросом. Ничего не придумывай сверх того, что есть в контексте.
 
-Исполнитель и срок — если человек явно называет, кому назначить (по имени) и/или когда срок, для fix —
-fixAssignment, для split — keepAssignment (первая часть) и assigneeName/dueInDays внутри каждого элемента
-newTasks (вторая часть и далее). assigneeName — ровно то имя, как назвал человек (ты не проверяешь, что
-это реальный пользователь — это сделает код отдельно, назначит только при однозначном совпадении).
+Исполнитель и срок — если человек явно называет, кому назначить и/или когда срок, для fix — fixAssignment,
+для split — keepAssignment (первая часть) и assigneeGid/dueInDays внутри каждого элемента newTasks (вторая
+часть и далее).
+
+assigneeGid — ищи совпадение ТОЛЬКО среди участников проекта, список ниже (не всего воркспейса — других
+людей с похожими/такими же именами может быть много, они не в счёт). Учитывай уменьшительные имена и
+варианты написания (например "Наташа"/"Natasha" = "Nataliia", "Саша" = "Alexander"/"Alexandra"). Указывай
+gid, только если понятен РОВНО ОДИН участник из списка; если ни один не подходит, или подходят несколько —
+не указывай это поле вообще, не угадывай.
+
+Участники проекта:
+${membersList}
+
 dueInDays — число дней от сегодня (целое), если был явный относительный срок ("через неделю" → 7, "завтра"
 → 1, "до пятницы" — посчитай дни до ближайшей пятницы); если срок не называли — не указывай это поле.
-Если имя/срок не названы явно — не выдумывай, оставь поле пустым (человек донастроит вручную).
 
 Ты НЕ можешь закрывать/удалять задачи — если просят об этом, kind="reply" с объяснением, что это делает
 человек.
@@ -215,9 +226,9 @@ reply — всегда короткий текст на испанском: от
 1-2 коротких предложения, без лишних деталей.
 
 Отвечай СТРОГО JSON: {"kind": "reply"|"fix"|"split", "reply": "...", "newName"?: "...", "newNotes"?: "...",
-"fixAssignment"?: {"assigneeName"?: "...", "dueInDays"?: 0}, "keepName"?: "...", "keepNotes"?: "...",
-"keepAssignment"?: {"assigneeName"?: "...", "dueInDays"?: 0},
-"newTasks"?: [{"name": "...", "notes"?: "...", "assigneeName"?: "...", "dueInDays"?: 0}]}`,
+"fixAssignment"?: {"assigneeGid"?: "...", "dueInDays"?: 0}, "keepName"?: "...", "keepNotes"?: "...",
+"keepAssignment"?: {"assigneeGid"?: "...", "dueInDays"?: 0},
+"newTasks"?: [{"name": "...", "notes"?: "...", "assigneeGid"?: "...", "dueInDays"?: 0}]}`,
     `Задача: "${taskName}"\nОписание: ${taskNotes || "(пусто)"}\n\n` +
       `Недавние комментарии (от старых к новым):\n${recentComments.join("\n---\n") || "(нет)"}\n\n` +
       `Новый комментарий с упоминанием: "${question}"`,

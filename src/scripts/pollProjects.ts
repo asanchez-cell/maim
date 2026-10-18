@@ -91,7 +91,6 @@ async function main(): Promise<void> {
     if (!Array.isArray(mentionsState[key])) delete mentionsState[key];
   }
   const botMe = await asana.getMe();
-  const workspaceGid = await asana.getWorkspaceGid();
   let hadErrors = false;
 
   for (const project of projects) {
@@ -107,7 +106,6 @@ async function main(): Promise<void> {
         project.asanaProjectGid,
         project.code,
         botMe.gid,
-        workspaceGid,
         mentionsState[project.asanaProjectGid],
       );
     } catch (err) {
