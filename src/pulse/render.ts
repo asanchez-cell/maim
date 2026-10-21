@@ -248,7 +248,8 @@ export function renderPulse(data: PulseData): string {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{color-scheme:dark;--bg:#08090a;--panel:#0f1011;--hover:#16171a;--line:#1f2023;--line2:#2a2b30;--fg:#f7f8f8;--fg2:#d0d6e0;--muted:#8a8f98;--dim:#62666d;--accent:#7170ff;--red:#eb5757;--amber:#f2994a;--green:#4cb782;--grey:#62666d}
-@media (prefers-color-scheme:light){:root{color-scheme:light;--bg:#fcfcfd;--panel:#f4f5f8;--hover:#eef0f3;--line:#e9eaee;--line2:#dcdee4;--fg:#1b1c1f;--fg2:#3c3f46;--muted:#6b6f76;--dim:#9a9ea6;--accent:#5e6ad2;--red:#d1453b;--amber:#d9822b;--green:#2f9e6a;--grey:#a0a4ab}}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){color-scheme:light;--bg:#fcfcfd;--panel:#f4f5f8;--hover:#eef0f3;--line:#e9eaee;--line2:#dcdee4;--fg:#1b1c1f;--fg2:#3c3f46;--muted:#6b6f76;--dim:#9a9ea6;--accent:#5e6ad2;--red:#d1453b;--amber:#d9822b;--green:#2f9e6a;--grey:#a0a4ab}}
+:root[data-theme="light"]{color-scheme:light;--bg:#fcfcfd;--panel:#f4f5f8;--hover:#eef0f3;--line:#e9eaee;--line2:#dcdee4;--fg:#1b1c1f;--fg2:#3c3f46;--muted:#6b6f76;--dim:#9a9ea6;--accent:#5e6ad2;--red:#d1453b;--amber:#d9822b;--green:#2f9e6a;--grey:#a0a4ab}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;scroll-padding-top:56px}
 body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01"}
