@@ -20,6 +20,9 @@ export interface AsanaTask {
   parent: { gid: string; name: string } | null;
   projects: AsanaProjectRef[];
   permalink_url: string;
+  /** Запрашиваются только для дашборда «Пульс» (getProjectPulseTasks). */
+  created_at?: string;
+  completed_at?: string | null;
 }
 
 export interface AsanaStory {

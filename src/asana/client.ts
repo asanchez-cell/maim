@@ -65,6 +65,25 @@ export const asana = {
     return tasks;
   },
 
+  /**
+   * Для дашборда «Пульс»: все незакрытые задачи проекта плюс закрытые после
+   * `since` (так считается, сколько закрыли за последние недели).
+   */
+  async getProjectPulseTasks(projectGid: string, since: string): Promise<AsanaTask[]> {
+    const fields = `${TASK_OPT_FIELDS},created_at,completed_at`;
+    const tasks: AsanaTask[] = [];
+    let path: string | null =
+      `/projects/${projectGid}/tasks?completed_since=${encodeURIComponent(since)}&opt_fields=${fields}&limit=100`;
+
+    while (path) {
+      const res: { data: AsanaTask[]; next_page: { path: string } | null } = await requestPage(path);
+      tasks.push(...res.data);
+      path = res.next_page ? res.next_page.path.replace(BASE_URL, "") : null;
+    }
+
+    return tasks;
+  },
+
   /** Задачи проекта, изменённые после `since` — нужно для поиска новых комментариев (раздел про упоминания). */
   async getTasksModifiedSince(projectGid: string, since: string): Promise<AsanaTask[]> {
     const tasks: AsanaTask[] = [];

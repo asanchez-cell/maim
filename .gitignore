@@ -4,3 +4,4 @@ dist/
 .webhook-secret
 *.log
 .DS_Store
+site/

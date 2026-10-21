@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "poll": "tsx src/scripts/pollProjects.ts",
     "weekly-scan": "tsx src/scripts/runWeeklyScan.ts",
+    "pulse": "tsx src/scripts/buildPulse.ts",
     "register-webhooks": "tsx src/scripts/registerWebhooks.ts"
   },
   "dependencies": {

@@ -1,0 +1,61 @@
+name: Asanchez — пульс компании
+
+on:
+  schedule:
+    # Каждый час в :17 (не в :00, чтобы не совпадать с пиком очереди GitHub).
+    - cron: "17 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: asanchez-pulse
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Собрать дашборд из Asana
+        run: npm run pulse
+        env:
+          ASANA_ACCESS_TOKEN: ${{ secrets.ASANA_ACCESS_TOKEN }}
+          # config.ts требует ключ при загрузке; сам дашборд Claude не вызывает.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      # Всегда доступно для скачивания во вкладке Actions (страница открывается локально).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pulse
+          path: site/
+          retention-days: 7
+
+      # Публикация на GitHub Pages — только когда она явно включена переменной
+      # PULSE_PAGES=true: данные задач увидит любой, у кого есть доступ к сайту.
+      - if: vars.PULSE_PAGES == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    needs: build
+    if: vars.PULSE_PAGES == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
